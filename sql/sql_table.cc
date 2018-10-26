@@ -6687,17 +6687,26 @@ static bool fill_alter_inplace_info(THD *thd,
          key_part < end;
          key_part++, new_part++)
     {
-      /*
-        Key definition has changed if we are using a different field or
-        if the used key part length is different. It makes sense to
-        check lengths first as in case when fields differ it is likely
-        that lengths differ too and checking fields is more expensive
-        in general case.
-      */
-      if (key_part->length != new_part->length)
-        goto index_changed;
-
       new_field= get_field_by_index(alter_info, new_part->fieldnr);
+      /*
+        If there is a change in index length due to column expansion
+	like varchar(X) changed to varchar(X + N) and has a compatible
+	packed data representation, we mark it for fast/INPLACE change
+	in index definition. InnoDB supports INPLACE for this cases
+
+        Key definition has changed if we are using a different field or
+	if the user key part length is different.
+      */
+      if (key_part->length != new_part->length &&
+          (ha_alter_info->alter_info->flags & Alter_info::ALTER_CHANGE_COLUMN) &&
+	  (key_part->field->is_equal((Create_field*) new_field)
+           == IS_EQUAL_PACK_LENGTH))
+      {
+        ha_alter_info->handler_flags |=
+           Alter_inplace_info::ALTER_COLUMN_INDEX_LENGTH;
+      }
+      else if (key_part->length != new_part->length)
+        goto index_changed;
 
       /*
         For prefix keys KEY_PART_INFO::field points to cloned Field
