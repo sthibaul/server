@@ -3953,14 +3953,6 @@ static int exec_relay_log_event(THD* thd, Relay_log_info* rli,
       */
       if (res == 0)
         rli->event_relay_log_pos= rli->future_event_relay_log_pos;
-      /*
-        If we rolled back to serial execution. Then write master timestamp as usual.
-      */
-      if (res < 0 && !(ev->is_artificial_event() || ev->is_relay_log_event() || (ev->when == 0)))
-      {
-        rli->last_master_timestamp= ev->when + (time_t) ev->exec_time;
-        DBUG_ASSERT(rli->last_master_timestamp >= 0);
-      }
       if (res >= 0)
         DBUG_RETURN(res);
       /*
@@ -3968,6 +3960,11 @@ static int exec_relay_log_event(THD* thd, Relay_log_info* rli,
         This is the case for pre-10.0 events without GTID, and for handling
         slave_skip_counter.
       */
+      if (!(ev->is_artificial_event() || ev->is_relay_log_event() || (ev->when == 0)))
+      {
+        rli->last_master_timestamp= ev->when + (time_t) ev->exec_time;
+        DBUG_ASSERT(rli->last_master_timestamp >= 0);
+      }
     }
 
     if (typ == GTID_EVENT)
